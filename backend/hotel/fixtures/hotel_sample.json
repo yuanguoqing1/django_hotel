@@ -1,0 +1,57 @@
+[
+  {
+    "model": "hotel.room",
+    "pk": 1,
+    "fields": {
+      "number": "101",
+      "room_type": "Single",
+      "capacity": 1,
+      "price": "79.99",
+      "status": "available",
+      "description": "Cozy single room with desk."
+    }
+  },
+  {
+    "model": "hotel.room",
+    "pk": 2,
+    "fields": {
+      "number": "201",
+      "room_type": "Double",
+      "capacity": 2,
+      "price": "109.99",
+      "status": "maintenance",
+      "description": "Spacious double room overlooking courtyard."
+    }
+  },
+  {
+    "model": "hotel.room",
+    "pk": 3,
+    "fields": {
+      "number": "301",
+      "room_type": "Suite",
+      "capacity": 4,
+      "price": "189.00",
+      "status": "available",
+      "description": "Corner suite with seating area."
+    }
+  },
+  {
+    "model": "hotel.guest",
+    "pk": 1,
+    "fields": {
+      "full_name": "Alicia Chen",
+      "email": "alicia@example.com",
+      "phone_number": "+1-555-1001"
+    }
+  },
+  {
+    "model": "hotel.service",
+    "pk": 1,
+    "fields": {
+      "name": "Breakfast",
+      "description": "Fresh continental breakfast",
+      "price": "12.00",
+      "is_active": true
+    }
+  }
+]
