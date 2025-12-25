@@ -1,10 +1,11 @@
-from datetime import date
-
 from django.db import transaction
 from django.utils.dateparse import parse_date
-from rest_framework import status, viewsets
+from rest_framework import permissions, status, viewsets
+from rest_framework.authtoken.models import Token
+from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Booking, Guest, Room, Service
 from .serializers import BookingSerializer, GuestSerializer, RoomSerializer, ServiceSerializer
@@ -13,6 +14,7 @@ from .serializers import BookingSerializer, GuestSerializer, RoomSerializer, Ser
 class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -43,11 +45,13 @@ class RoomViewSet(viewsets.ModelViewSet):
 class GuestViewSet(viewsets.ModelViewSet):
     queryset = Guest.objects.all()
     serializer_class = GuestSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.select_related('room', 'guest').all()
     serializer_class = BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -88,9 +92,51 @@ class BookingViewSet(viewsets.ModelViewSet):
 class ServiceViewSet(viewsets.ModelViewSet):
     queryset = Service.objects.all()
     serializer_class = ServiceSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         qs = super().get_queryset()
         if self.request.query_params.get('active') == 'true':
             qs = qs.filter(is_active=True)
         return qs
+
+
+class LoginView(ObtainAuthToken):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):  # type: ignore[override]
+        response = super().post(request, *args, **kwargs)
+        token = Token.objects.get(key=response.data['token'])
+        user = token.user
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'username': user.get_username(),
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+            },
+        })
+
+
+class MeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            'id': user.id,
+            'username': user.get_username(),
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
+        })
+
+
+class LogoutView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        token: Token | None = getattr(request.user, 'auth_token', None)
+        if token:
+            token.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

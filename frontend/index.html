@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hotel Manager</title>
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -66,7 +67,7 @@
               <h1>酒店管理后台</h1>
               <span class="tag">Django REST · Vue 3</span>
             </div>
-            <p class="subtle">轻量运营面板，确保后端运行在 <code>http://localhost:8000</code></p>
+            <p class="subtle">轻量运营面板，当前使用前端模拟数据（无需真实后端即可体验）。</p>
           </div>
         </div>
         <div class="inline">
@@ -76,7 +77,29 @@
     </header>
 
     <main class="container">
-      <section class="hero">
+      <section class="hero" v-if="!currentUser">
+        <div class="section-head">
+          <div>
+            <h2>登录后台</h2>
+            <p class="small">默认账号：用户名 admin · 密码 admin123（启动时自动创建）。</p>
+          </div>
+        </div>
+        <form @submit.prevent="performLogin" class="grid" style="align-items:end;">
+          <div>
+            <label>用户名<input v-model="authForm.username" required autocomplete="username" /></label>
+          </div>
+          <div>
+            <label>密码<input type="password" v-model="authForm.password" required autocomplete="current-password" /></label>
+          </div>
+          <button class="btn" type="submit" :disabled="authLoading">
+            <span v-if="authLoading">登录中...</span>
+            <span v-else>登录</span>
+          </button>
+        </form>
+        <p class="small error" v-if="authError">{{ authError }}</p>
+      </section>
+
+      <section class="hero" v-else>
         <div class="section-head">
           <div>
             <h2>房态概览</h2>
@@ -90,6 +113,8 @@
               <option value="occupied">在住</option>
               <option value="maintenance">维修</option>
             </select>
+            <span class="pill total">已登录 {{ currentUser.username }}</span>
+            <button class="btn ghost" @click="logout">退出</button>
           </div>
         </div>
         <div class="status-grid">
@@ -112,7 +137,7 @@
         </div>
       </section>
 
-      <div class="layout">
+      <div class="layout" v-if="currentUser">
         <section class="card">
           <div class="section-head">
             <div>
@@ -172,7 +197,7 @@
         </section>
       </div>
 
-      <div class="layout">
+      <div class="layout" v-if="currentUser">
         <section class="card">
           <div class="section-head">
             <div>
@@ -249,10 +274,68 @@
 
   <script>
     const { createApp, ref, computed, onMounted } = Vue;
+    const USE_MOCK_DATA = true;
     const apiBase = 'http://localhost:8000/api';
 
+    const mockStore = {
+      rooms: [
+        { id: 1, number: '101', room_type: 'Single', capacity: 1, price: 79.99, status: 'occupied', description: 'Cozy single room with desk.' },
+        { id: 2, number: '1012', room_type: '单人间', capacity: 1, price: 110.0, status: 'available', description: '' },
+        { id: 3, number: '201', room_type: 'Double', capacity: 2, price: 109.99, status: 'maintenance', description: 'Spacious double room overlooking courtyard.' },
+        { id: 4, number: '301', room_type: 'Suite', capacity: 4, price: 189.0, status: 'available', description: 'Corner suite with seating area.' },
+      ],
+      guests: [
+        { id: 1, full_name: 'Alicia Chen', email: 'alicia@example.com', phone_number: '+1-555-1001' },
+        { id: 2, full_name: 'Li Wei', email: 'liwei@example.com', phone_number: '+86-188-1001-0001' },
+      ],
+      bookings: [
+        {
+          id: 1,
+          room: 1,
+          guest: 1,
+          check_in: dayjs().add(6, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(15, 'day').format('YYYY-MM-DD'),
+          status: 'checked_in',
+          total_price: 719.91,
+          notes: '欢迎入住',
+        },
+        {
+          id: 2,
+          room: 3,
+          guest: 1,
+          check_in: dayjs().add(0, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(1, 'day').format('YYYY-MM-DD'),
+          status: 'reserved',
+          total_price: 15.0,
+          notes: '',
+        },
+        {
+          id: 3,
+          room: 2,
+          guest: 2,
+          check_in: dayjs().add(1, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(3, 'day').format('YYYY-MM-DD'),
+          status: 'reserved',
+          total_price: 189.98,
+          notes: '延迟入住',
+        },
+      ],
+      services: [
+        { id: 1, name: 'Breakfast', description: 'Fresh continental breakfast', price: 12.0, is_active: true },
+      ],
+      nextIds: { room: 5, guest: 3, booking: 4 },
+    };
+
     const apiFetch = async (path, options = {}) => {
+      if (USE_MOCK_DATA) {
+        return mockApi(path, options);
+      }
+
       const headers = options.headers ? { ...options.headers } : {};
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Token ${token}`;
+      }
       if (options.body && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
       }
@@ -274,6 +357,142 @@
       }
     };
 
+    const mockApi = async (path, options = {}) => {
+      await new Promise((resolve) => setTimeout(resolve, 200)); // simulate latency
+      try {
+        if (path === '/auth/login/' && options.method === 'POST') {
+          const body = JSON.parse(options.body || '{}');
+          if (body.username === 'admin' && body.password === 'admin123') {
+            const data = { token: 'mock-token', user: { id: 1, username: 'admin', is_staff: true, is_superuser: true } };
+            localStorage.setItem('token', data.token);
+            return { ok: true, data };
+          }
+          throw new Error('用户名或密码错误');
+        }
+
+        if (path === '/auth/me/') {
+          const token = localStorage.getItem('token');
+          if (token === 'mock-token') {
+            return { ok: true, data: { id: 1, username: 'admin', is_staff: true, is_superuser: true } };
+          }
+          throw new Error('未登录');
+        }
+
+        if (path === '/auth/logout/' && options.method === 'POST') {
+          localStorage.removeItem('token');
+          return { ok: true, data: {} };
+        }
+
+        if (path.startsWith('/rooms/available')) {
+          const url = new URL(`http://localhost${path}`);
+          const start = url.searchParams.get('start');
+          const end = url.searchParams.get('end');
+          if (!start || !end || dayjs(end).isSameOrBefore(start)) {
+            throw new Error('日期范围无效');
+          }
+          const activeStatuses = ['reserved', 'checked_in'];
+          const available = mockStore.rooms.filter((room) => {
+            const overlap = mockStore.bookings.some((b) => {
+              if (b.room !== room.id) return false;
+              if (!activeStatuses.includes(b.status)) return false;
+              return dayjs(b.check_in).isBefore(end) && dayjs(b.check_out).isAfter(start);
+            });
+            return !overlap && room.status !== 'maintenance';
+          });
+          return { ok: true, data: available };
+        }
+
+        if (path.startsWith('/rooms/')) {
+          const statusQuery = path.split('?')[1];
+          if (statusQuery) {
+            const [, status] = statusQuery.split('=');
+            return { ok: true, data: mockStore.rooms.filter((r) => r.status === status) };
+          }
+          return { ok: true, data: mockStore.rooms };
+        }
+
+        if (path === '/bookings/' && (!options.method || options.method === 'GET')) {
+          const data = mockStore.bookings
+            .map((b) => ({
+              ...b,
+              room_detail: mockStore.rooms.find((r) => r.id === b.room),
+              guest_detail: mockStore.guests.find((g) => g.id === b.guest),
+            }))
+            .sort((a, b) => dayjs(b.check_in).valueOf() - dayjs(a.check_in).valueOf());
+          return { ok: true, data };
+        }
+
+        if (path === '/bookings/' && options.method === 'POST') {
+          const payload = JSON.parse(options.body || '{}');
+          const room = mockStore.rooms.find((r) => r.id === Number(payload.room));
+          const guest = mockStore.guests.find((g) => g.id === Number(payload.guest));
+          if (!room || !guest) throw new Error('住客或房间不存在');
+          const start = dayjs(payload.check_in);
+          const end = dayjs(payload.check_out);
+          if (!start.isValid() || !end.isValid() || !end.isAfter(start)) throw new Error('日期无效');
+          const nights = end.diff(start, 'day');
+          const newBooking = {
+            id: mockStore.nextIds.booking++,
+            room: room.id,
+            guest: guest.id,
+            check_in: payload.check_in,
+            check_out: payload.check_out,
+            status: 'reserved',
+            total_price: Number((nights * room.price).toFixed(2)),
+            notes: payload.notes || '',
+          };
+          mockStore.bookings.push(newBooking);
+          return { ok: true, data: newBooking };
+        }
+
+        const bookingActionMatch = path.match(/^\\/bookings\\/(\\d+)\\/(cancel|check_in|complete)\\/$/);
+        if (bookingActionMatch && options.method === 'POST') {
+          const [, id, action] = bookingActionMatch;
+          const booking = mockStore.bookings.find((b) => b.id === Number(id));
+          if (!booking) throw new Error('预订不存在');
+          if (action === 'cancel') {
+            booking.status = 'cancelled';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room && room.status === 'occupied') room.status = 'available';
+          }
+          if (action === 'check_in') {
+            booking.status = 'checked_in';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room) room.status = 'occupied';
+          }
+          if (action === 'complete') {
+            booking.status = 'completed';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room) room.status = 'available';
+          }
+          booking.updated_at = new Date().toISOString();
+          return { ok: true, data: booking };
+        }
+
+        if (path === '/guests/' && options.method === 'POST') {
+          const payload = JSON.parse(options.body || '{}');
+          const emailExists = mockStore.guests.some((g) => g.email === payload.email);
+          if (emailExists) throw new Error('邮箱已存在');
+          const newGuest = {
+            id: mockStore.nextIds.guest++,
+            full_name: payload.full_name,
+            email: payload.email,
+            phone_number: payload.phone_number || '',
+          };
+          mockStore.guests.push(newGuest);
+          return { ok: true, data: newGuest };
+        }
+
+        if (path === '/services/') {
+          return { ok: true, data: mockStore.services };
+        }
+
+        throw new Error('未实现的模拟接口');
+      } catch (error) {
+        return { ok: false, error: error.message || '模拟接口异常' };
+      }
+    };
+
     createApp({
       setup() {
         const rooms = ref([]);
@@ -292,46 +511,55 @@
         const roomsError = ref('');
         const bookingsLoading = ref(false);
         const bookingsError = ref('');
-        const availabilityForm = ref({ start: '', end: '' });
+        const availabilityForm = ref({ start: dayjs().format('YYYY-MM-DD'), end: dayjs().add(1, 'day').format('YYYY-MM-DD') });
         const availabilityResults = ref([]);
         const availabilityLoading = ref(false);
         const availabilityError = ref('');
         const guestForm = ref({ full_name: '', email: '', phone_number: '' });
         const bookingForm = ref({ room: '', guest: '', check_in: '', check_out: '', notes: '' });
+        const authForm = ref({ username: 'admin', password: 'admin123' });
+        const authError = ref('');
+        const authLoading = ref(false);
+        const currentUser = ref(null);
+        const isGuestSubmitting = ref(false);
+        const isBookingSubmitting = ref(false);
+        const actionLoading = ref({});
+        const serviceFilterActive = ref('');
+        const serviceForm = ref({});
         const statusCounts = computed(() => rooms.value.reduce((acc, room) => {
           acc[room.status] = (acc[room.status] || 0) + 1;
           return acc;
         }, {}));
         const totalRooms = computed(() => rooms.value.length);
 
+        const setActionLoading = (id, value) => {
+          actionLoading.value = { ...actionLoading.value, [id]: value };
+        };
+
         const loadRooms = async () => {
           roomsLoading.value = true;
           roomsError.value = '';
-          try {
-            const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
-            const res = await fetch(`${apiBase}/rooms/${statusQuery}`);
-            if (!res.ok) throw new Error('房间数据获取失败');
-            rooms.value = await res.json();
-          } catch (error) {
+          const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
+          const { ok, data, error } = await apiFetch(`/rooms/${statusQuery}`);
+          roomsLoading.value = false;
+          if (ok) {
+            rooms.value = data;
+          } else {
             rooms.value = [];
-            roomsError.value = '房间加载失败，请检查后端服务。';
-          } finally {
-            roomsLoading.value = false;
+            roomsError.value = error || '房间加载失败，请检查后端服务。';
           }
         };
 
         const loadBookings = async () => {
           bookingsLoading.value = true;
           bookingsError.value = '';
-          try {
-            const res = await fetch(`${apiBase}/bookings/`);
-            if (!res.ok) throw new Error('预订数据获取失败');
-            bookings.value = await res.json();
-          } catch (error) {
+          const { ok, data, error } = await apiFetch('/bookings/');
+          bookingsLoading.value = false;
+          if (ok) {
+            bookings.value = data;
+          } else {
             bookings.value = [];
-            bookingsError.value = '预订加载失败，请检查后端服务。';
-          } finally {
-            bookingsLoading.value = false;
+            bookingsError.value = error || '预订加载失败，请检查后端服务。';
           }
         };
 
@@ -340,24 +568,18 @@
           guestMessage.value = '';
           guestError.value = '';
           guestLoading.value = true;
-          try {
-            const res = await fetch(`${apiBase}/guests/`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(guestForm.value),
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error(err.detail || '创建失败，请检查输入或后端日志。');
-            }
-            const data = await res.json();
+          isGuestSubmitting.value = true;
+          const { ok, data, error } = await apiFetch('/guests/', {
+            method: 'POST',
+            body: JSON.stringify(guestForm.value),
+          });
+          if (ok) {
             guestMessage.value = `创建成功，住客ID: ${data.id}`;
             guestForm.value = { full_name: '', email: '', phone_number: '' };
-          } catch (error) {
-            guestError.value = error.message;
-          } finally {
-            guestLoading.value = false;
+          } else {
+            guestError.value = error || '创建失败，请检查输入或后端日志。';
           }
+          guestLoading.value = false;
           isGuestSubmitting.value = false;
         };
 
@@ -366,25 +588,20 @@
           bookingMessage.value = '';
           bookingError.value = '';
           bookingLoading.value = true;
-          try {
-            const res = await fetch(`${apiBase}/bookings/`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(bookingForm.value),
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error(err.detail || '预订创建失败，请检查输入。');
-            }
+          isBookingSubmitting.value = true;
+          const { ok, error } = await apiFetch('/bookings/', {
+            method: 'POST',
+            body: JSON.stringify(bookingForm.value),
+          });
+          if (ok) {
             bookingMessage.value = '预订已创建！';
             bookingForm.value = { room: '', guest: '', check_in: '', check_out: '', notes: '' };
-            loadBookings();
-            loadRooms();
-          } catch (error) {
-            bookingError.value = error.message;
-          } finally {
-            bookingLoading.value = false;
+            await loadBookings();
+            await loadRooms();
+          } else {
+            bookingError.value = error || '预订创建失败，请检查输入。';
           }
+          bookingLoading.value = false;
           isBookingSubmitting.value = false;
         };
 
@@ -405,25 +622,68 @@
           availabilityLoading.value = true;
           availabilityError.value = '';
           availabilityResults.value = [];
-          try {
-            const params = new URLSearchParams({
-              start: availabilityForm.value.start,
-              end: availabilityForm.value.end,
-            });
-            const res = await fetch(`${apiBase}/rooms/available?${params.toString()}`);
-            if (!res.ok) throw new Error('可用房查询失败，请检查后端服务。');
-            availabilityResults.value = await res.json();
-          } catch (error) {
-            availabilityError.value = error.message;
-          } finally {
-            availabilityLoading.value = false;
+          const params = new URLSearchParams({
+            start: availabilityForm.value.start,
+            end: availabilityForm.value.end,
+          });
+          const { ok, data, error } = await apiFetch(`/rooms/available?${params.toString()}`);
+          availabilityLoading.value = false;
+          if (ok) {
+            availabilityResults.value = data;
+          } else {
+            availabilityError.value = error || '可用房查询失败，请检查后端服务。';
           }
         };
 
-        onMounted(() => {
-          loadRooms();
-          loadBookings();
-          loadServices();
+        const loadServices = async () => {
+          const { ok, data } = await apiFetch('/services/');
+          services.value = ok ? data : [];
+        };
+
+        const performLogin = async () => {
+          authError.value = '';
+          authLoading.value = true;
+          const { ok, data, error } = await apiFetch('/auth/login/', {
+            method: 'POST',
+            body: JSON.stringify(authForm.value),
+          });
+          authLoading.value = false;
+          if (!ok) {
+            authError.value = error || '登录失败';
+            return;
+          }
+          localStorage.setItem('token', data.token);
+          currentUser.value = data.user;
+          await bootstrapData();
+        };
+
+        const fetchMe = async () => {
+          const { ok, data, error } = await apiFetch('/auth/me/');
+          if (ok) {
+            currentUser.value = data;
+          } else if (error) {
+            localStorage.removeItem('token');
+            currentUser.value = null;
+          }
+        };
+
+        const logout = async () => {
+          await apiFetch('/auth/logout/', { method: 'POST' });
+          localStorage.removeItem('token');
+          currentUser.value = null;
+          rooms.value = [];
+          bookings.value = [];
+        };
+
+        const bootstrapData = async () => {
+          await Promise.all([loadRooms(), loadBookings(), loadServices()]);
+        };
+
+        onMounted(async () => {
+          await fetchMe();
+          if (currentUser.value) {
+            await bootstrapData();
+          }
         });
 
         return {
@@ -431,10 +691,13 @@
           bookings,
           services,
           roomStatus,
-          serviceFilterActive,
           guestForm,
           bookingForm,
-          serviceForm,
+          authForm,
+          authError,
+          authLoading,
+          currentUser,
+          actionLoading,
           guestMessage,
           guestError,
           guestLoading,
@@ -456,6 +719,10 @@
           createBooking,
           updateStatus,
           searchAvailability,
+          loadServices,
+          performLogin,
+          fetchMe,
+          logout,
         };
       }
     }).mount('#app');
