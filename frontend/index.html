@@ -67,7 +67,7 @@
               <h1>酒店管理后台</h1>
               <span class="tag">Django REST · Vue 3</span>
             </div>
-            <p class="subtle">轻量运营面板，确保后端运行在 <code>http://localhost:8000</code></p>
+            <p class="subtle">轻量运营面板，当前使用前端模拟数据（无需真实后端即可体验）。</p>
           </div>
         </div>
         <div class="inline">
@@ -274,9 +274,63 @@
 
   <script>
     const { createApp, ref, computed, onMounted } = Vue;
+    const USE_MOCK_DATA = true;
     const apiBase = 'http://localhost:8000/api';
 
+    const mockStore = {
+      rooms: [
+        { id: 1, number: '101', room_type: 'Single', capacity: 1, price: 79.99, status: 'occupied', description: 'Cozy single room with desk.' },
+        { id: 2, number: '1012', room_type: '单人间', capacity: 1, price: 110.0, status: 'available', description: '' },
+        { id: 3, number: '201', room_type: 'Double', capacity: 2, price: 109.99, status: 'maintenance', description: 'Spacious double room overlooking courtyard.' },
+        { id: 4, number: '301', room_type: 'Suite', capacity: 4, price: 189.0, status: 'available', description: 'Corner suite with seating area.' },
+      ],
+      guests: [
+        { id: 1, full_name: 'Alicia Chen', email: 'alicia@example.com', phone_number: '+1-555-1001' },
+        { id: 2, full_name: 'Li Wei', email: 'liwei@example.com', phone_number: '+86-188-1001-0001' },
+      ],
+      bookings: [
+        {
+          id: 1,
+          room: 1,
+          guest: 1,
+          check_in: dayjs().add(6, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(15, 'day').format('YYYY-MM-DD'),
+          status: 'checked_in',
+          total_price: 719.91,
+          notes: '欢迎入住',
+        },
+        {
+          id: 2,
+          room: 3,
+          guest: 1,
+          check_in: dayjs().add(0, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(1, 'day').format('YYYY-MM-DD'),
+          status: 'reserved',
+          total_price: 15.0,
+          notes: '',
+        },
+        {
+          id: 3,
+          room: 2,
+          guest: 2,
+          check_in: dayjs().add(1, 'day').format('YYYY-MM-DD'),
+          check_out: dayjs().add(3, 'day').format('YYYY-MM-DD'),
+          status: 'reserved',
+          total_price: 189.98,
+          notes: '延迟入住',
+        },
+      ],
+      services: [
+        { id: 1, name: 'Breakfast', description: 'Fresh continental breakfast', price: 12.0, is_active: true },
+      ],
+      nextIds: { room: 5, guest: 3, booking: 4 },
+    };
+
     const apiFetch = async (path, options = {}) => {
+      if (USE_MOCK_DATA) {
+        return mockApi(path, options);
+      }
+
       const headers = options.headers ? { ...options.headers } : {};
       const token = localStorage.getItem('token');
       if (token) {
@@ -300,6 +354,142 @@
         return { ok: true, data };
       } catch (error) {
         return { ok: false, error: error.message || '网络错误' };
+      }
+    };
+
+    const mockApi = async (path, options = {}) => {
+      await new Promise((resolve) => setTimeout(resolve, 200)); // simulate latency
+      try {
+        if (path === '/auth/login/' && options.method === 'POST') {
+          const body = JSON.parse(options.body || '{}');
+          if (body.username === 'admin' && body.password === 'admin123') {
+            const data = { token: 'mock-token', user: { id: 1, username: 'admin', is_staff: true, is_superuser: true } };
+            localStorage.setItem('token', data.token);
+            return { ok: true, data };
+          }
+          throw new Error('用户名或密码错误');
+        }
+
+        if (path === '/auth/me/') {
+          const token = localStorage.getItem('token');
+          if (token === 'mock-token') {
+            return { ok: true, data: { id: 1, username: 'admin', is_staff: true, is_superuser: true } };
+          }
+          throw new Error('未登录');
+        }
+
+        if (path === '/auth/logout/' && options.method === 'POST') {
+          localStorage.removeItem('token');
+          return { ok: true, data: {} };
+        }
+
+        if (path.startsWith('/rooms/available')) {
+          const url = new URL(`http://localhost${path}`);
+          const start = url.searchParams.get('start');
+          const end = url.searchParams.get('end');
+          if (!start || !end || dayjs(end).isSameOrBefore(start)) {
+            throw new Error('日期范围无效');
+          }
+          const activeStatuses = ['reserved', 'checked_in'];
+          const available = mockStore.rooms.filter((room) => {
+            const overlap = mockStore.bookings.some((b) => {
+              if (b.room !== room.id) return false;
+              if (!activeStatuses.includes(b.status)) return false;
+              return dayjs(b.check_in).isBefore(end) && dayjs(b.check_out).isAfter(start);
+            });
+            return !overlap && room.status !== 'maintenance';
+          });
+          return { ok: true, data: available };
+        }
+
+        if (path.startsWith('/rooms/')) {
+          const statusQuery = path.split('?')[1];
+          if (statusQuery) {
+            const [, status] = statusQuery.split('=');
+            return { ok: true, data: mockStore.rooms.filter((r) => r.status === status) };
+          }
+          return { ok: true, data: mockStore.rooms };
+        }
+
+        if (path === '/bookings/' && (!options.method || options.method === 'GET')) {
+          const data = mockStore.bookings
+            .map((b) => ({
+              ...b,
+              room_detail: mockStore.rooms.find((r) => r.id === b.room),
+              guest_detail: mockStore.guests.find((g) => g.id === b.guest),
+            }))
+            .sort((a, b) => dayjs(b.check_in).valueOf() - dayjs(a.check_in).valueOf());
+          return { ok: true, data };
+        }
+
+        if (path === '/bookings/' && options.method === 'POST') {
+          const payload = JSON.parse(options.body || '{}');
+          const room = mockStore.rooms.find((r) => r.id === Number(payload.room));
+          const guest = mockStore.guests.find((g) => g.id === Number(payload.guest));
+          if (!room || !guest) throw new Error('住客或房间不存在');
+          const start = dayjs(payload.check_in);
+          const end = dayjs(payload.check_out);
+          if (!start.isValid() || !end.isValid() || !end.isAfter(start)) throw new Error('日期无效');
+          const nights = end.diff(start, 'day');
+          const newBooking = {
+            id: mockStore.nextIds.booking++,
+            room: room.id,
+            guest: guest.id,
+            check_in: payload.check_in,
+            check_out: payload.check_out,
+            status: 'reserved',
+            total_price: Number((nights * room.price).toFixed(2)),
+            notes: payload.notes || '',
+          };
+          mockStore.bookings.push(newBooking);
+          return { ok: true, data: newBooking };
+        }
+
+        const bookingActionMatch = path.match(/^\\/bookings\\/(\\d+)\\/(cancel|check_in|complete)\\/$/);
+        if (bookingActionMatch && options.method === 'POST') {
+          const [, id, action] = bookingActionMatch;
+          const booking = mockStore.bookings.find((b) => b.id === Number(id));
+          if (!booking) throw new Error('预订不存在');
+          if (action === 'cancel') {
+            booking.status = 'cancelled';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room && room.status === 'occupied') room.status = 'available';
+          }
+          if (action === 'check_in') {
+            booking.status = 'checked_in';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room) room.status = 'occupied';
+          }
+          if (action === 'complete') {
+            booking.status = 'completed';
+            const room = mockStore.rooms.find((r) => r.id === booking.room);
+            if (room) room.status = 'available';
+          }
+          booking.updated_at = new Date().toISOString();
+          return { ok: true, data: booking };
+        }
+
+        if (path === '/guests/' && options.method === 'POST') {
+          const payload = JSON.parse(options.body || '{}');
+          const emailExists = mockStore.guests.some((g) => g.email === payload.email);
+          if (emailExists) throw new Error('邮箱已存在');
+          const newGuest = {
+            id: mockStore.nextIds.guest++,
+            full_name: payload.full_name,
+            email: payload.email,
+            phone_number: payload.phone_number || '',
+          };
+          mockStore.guests.push(newGuest);
+          return { ok: true, data: newGuest };
+        }
+
+        if (path === '/services/') {
+          return { ok: true, data: mockStore.services };
+        }
+
+        throw new Error('未实现的模拟接口');
+      } catch (error) {
+        return { ok: false, error: error.message || '模拟接口异常' };
       }
     };
 
