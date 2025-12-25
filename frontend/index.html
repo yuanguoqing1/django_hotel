@@ -26,8 +26,11 @@
     .pill.checked_in { background: #dbeafe; color: #1d4ed8; }
     .pill.completed { background: #ecfccb; color: #3f6212; }
     .pill.cancelled { background: #fef2f2; color: #991b1b; }
+    .pill.active { background: #def7ec; color: #047857; }
+    .pill.inactive { background: #fee2e2; color: #b91c1c; }
     .stack { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
     .small { font-size: 0.9rem; color: #6b7280; }
+    .error { color: #b91c1c; }
   </style>
 </head>
 <body>
@@ -50,6 +53,7 @@
               <option value="maintenance">维修</option>
             </select>
           </label>
+          <p class="small error" v-if="roomsError">{{ roomsError }}</p>
         </div>
         <ul class="list stack">
           <li v-for="room in rooms" :key="room.id" class="card" style="padding:12px">
@@ -88,6 +92,7 @@
       <section class="card">
         <h2>预订概览</h2>
         <p class="small">最新 10 条预订记录。</p>
+        <p class="small error" v-if="bookingError">{{ bookingError }}</p>
         <ul class="list stack">
           <li v-for="booking in bookings" :key="booking.id" class="card" style="padding:12px">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -103,6 +108,53 @@
           </li>
         </ul>
       </section>
+
+      <section class="card">
+        <h2>服务管理</h2>
+        <p class="small">查看启用服务，或快速新增与启用/停用。</p>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="secondary" @click="serviceFilterActive = !serviceFilterActive; loadServices();">
+            {{ serviceFilterActive ? '查看全部服务' : '仅查看启用服务' }}
+          </button>
+          <span class="small" v-if="servicesLoading">加载中...</span>
+          <span class="small error" v-if="servicesError">{{ servicesError }}</span>
+        </div>
+
+        <ul class="list stack" style="margin-top:8px;">
+          <li v-for="service in services" :key="service.id" class="card" style="padding:12px">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>{{ service.name }}</strong>
+                <p class="small">¥{{ service.price }} · {{ service.description || '无描述' }}</p>
+              </div>
+              <div class="stack" style="align-items:flex-end; margin-top:0;">
+                <span class="pill" :class="service.is_active ? 'active' : 'inactive'">
+                  {{ service.is_active ? '已启用' : '已停用' }}
+                </span>
+                <button class="secondary" @click="toggleServiceStatus(service)">
+                  {{ service.is_active ? '停用' : '启用' }}
+                </button>
+              </div>
+            </div>
+          </li>
+          <li class="small" v-if="!servicesLoading && !servicesError && services.length === 0" style="padding:8px;">暂无服务</li>
+        </ul>
+
+        <h3 style="margin-top:16px;">新增服务</h3>
+        <form @submit.prevent="submitService" class="stack">
+          <label>名称<input v-model="serviceForm.name" required /></label>
+          <label>价格<input type="number" min="0" step="0.01" v-model="serviceForm.price" required /></label>
+          <label>描述<textarea v-model="serviceForm.description"></textarea></label>
+          <label>状态
+            <select v-model="serviceForm.is_active">
+              <option :value="true">启用</option>
+              <option :value="false">停用</option>
+            </select>
+          </label>
+          <button type="submit">新增服务</button>
+          <p class="small" v-if="serviceMessage">{{ serviceMessage }}</p>
+        </form>
+      </section>
     </div>
   </div>
 
@@ -110,84 +162,183 @@
     const { createApp, ref, onMounted } = Vue;
     const apiBase = 'http://localhost:8000/api';
 
+    const apiFetch = async (path, options = {}) => {
+      const headers = options.headers ? { ...options.headers } : {};
+      if (options.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      try {
+        const res = await fetch(`${apiBase}${path}`, { ...options, headers });
+        const contentType = res.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        const data = isJson ? await res.json() : await res.text();
+
+        if (!res.ok) {
+          const detail = typeof data === 'string' ? data : data?.detail || JSON.stringify(data);
+          throw new Error(detail || '请求失败');
+        }
+
+        return { ok: true, data };
+      } catch (error) {
+        return { ok: false, error: error.message || '网络错误' };
+      }
+    };
+
     createApp({
       setup() {
         const rooms = ref([]);
         const bookings = ref([]);
+        const services = ref([]);
         const roomStatus = ref('');
+        const serviceFilterActive = ref(true);
         const guestMessage = ref('');
         const bookingMessage = ref('');
+        const serviceMessage = ref('');
+        const roomsError = ref('');
+        const bookingError = ref('');
+        const servicesError = ref('');
+        const servicesLoading = ref(false);
         const guestForm = ref({ full_name: '', email: '', phone_number: '' });
         const bookingForm = ref({ room: '', guest: '', check_in: '', check_out: '', notes: '' });
+        const serviceForm = ref({ name: '', price: '', description: '', is_active: true });
 
         const loadRooms = async () => {
+          roomsError.value = '';
           const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
-          const res = await fetch(`${apiBase}/rooms/${statusQuery}`);
-          rooms.value = await res.json();
+          const result = await apiFetch(`/rooms/${statusQuery}`);
+          if (result.ok) {
+            rooms.value = result.data;
+          } else {
+            rooms.value = [];
+            roomsError.value = result.error;
+          }
         };
 
         const loadBookings = async () => {
-          const res = await fetch(`${apiBase}/bookings/`);
-          bookings.value = await res.json();
+          bookingError.value = '';
+          const result = await apiFetch('/bookings/');
+          if (result.ok) {
+            bookings.value = result.data;
+          } else {
+            bookings.value = [];
+            bookingError.value = result.error;
+          }
+        };
+
+        const loadServices = async () => {
+          servicesError.value = '';
+          servicesLoading.value = true;
+          const query = serviceFilterActive.value ? '?active=true' : '';
+          const result = await apiFetch(`/services/${query}`);
+          servicesLoading.value = false;
+          if (result.ok) {
+            services.value = result.data;
+          } else {
+            services.value = [];
+            servicesError.value = result.error;
+          }
         };
 
         const createGuest = async () => {
           guestMessage.value = '';
-          const res = await fetch(`${apiBase}/guests/`, {
+          const result = await apiFetch('/guests/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(guestForm.value),
           });
-          if (res.ok) {
-            const data = await res.json();
-            guestMessage.value = `创建成功，住客ID: ${data.id}`;
+          if (result.ok) {
+            guestMessage.value = `创建成功，住客ID: ${result.data.id}`;
             guestForm.value = { full_name: '', email: '', phone_number: '' };
           } else {
-            guestMessage.value = '创建失败，请检查输入或后端日志。';
+            guestMessage.value = result.error;
           }
         };
 
         const createBooking = async () => {
           bookingMessage.value = '';
-          const res = await fetch(`${apiBase}/bookings/`, {
+          const result = await apiFetch('/bookings/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bookingForm.value),
           });
-          if (res.ok) {
+          if (result.ok) {
             bookingMessage.value = '预订已创建！';
             bookingForm.value = { room: '', guest: '', check_in: '', check_out: '', notes: '' };
             loadBookings();
             loadRooms();
           } else {
-            const err = await res.json();
-            bookingMessage.value = err.detail || JSON.stringify(err);
+            bookingMessage.value = result.error;
           }
         };
 
         const updateStatus = async (id, action) => {
-          await fetch(`${apiBase}/bookings/${id}/${action}/`, { method: 'POST' });
-          loadBookings();
-          loadRooms();
+          const result = await apiFetch(`/bookings/${id}/${action}/`, { method: 'POST' });
+          if (result.ok) {
+            loadBookings();
+            loadRooms();
+          } else {
+            bookingMessage.value = result.error;
+          }
+        };
+
+        const submitService = async () => {
+          serviceMessage.value = '';
+          const payload = { ...serviceForm.value, price: Number(serviceForm.value.price || 0) };
+          const result = await apiFetch('/services/', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          if (result.ok) {
+            serviceMessage.value = '服务已创建！';
+            serviceForm.value = { name: '', price: '', description: '', is_active: true };
+            loadServices();
+          } else {
+            serviceMessage.value = result.error;
+          }
+        };
+
+        const toggleServiceStatus = async (service) => {
+          serviceMessage.value = '';
+          const result = await apiFetch(`/services/${service.id}/`, {
+            method: 'PATCH',
+            body: JSON.stringify({ is_active: !service.is_active }),
+          });
+          if (result.ok) {
+            serviceMessage.value = `${service.is_active ? '已停用' : '已启用'} ${service.name}`;
+            loadServices();
+          } else {
+            serviceMessage.value = result.error;
+          }
         };
 
         onMounted(() => {
           loadRooms();
           loadBookings();
+          loadServices();
         });
 
         return {
           rooms,
           bookings,
+          services,
           roomStatus,
+          serviceFilterActive,
           guestForm,
           bookingForm,
+          serviceForm,
           guestMessage,
           bookingMessage,
+          serviceMessage,
+          roomsError,
+          bookingError,
+          servicesError,
+          servicesLoading,
           loadRooms,
           createGuest,
           createBooking,
           updateStatus,
+          submitService,
+          toggleServiceStatus,
+          loadServices,
         };
       }
     }).mount('#app');
