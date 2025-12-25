@@ -18,6 +18,7 @@
     input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
     button { background: #2563eb; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
     button.secondary { background: #e5e7eb; color: #111827; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
     .list { margin: 0; padding: 0; list-style: none; }
     .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; }
     .pill.available { background: #dcfce7; color: #166534; }
@@ -50,6 +51,7 @@
               <option value="maintenance">维修</option>
             </select>
           </label>
+          <p class="small" v-if="listMessage">{{ listMessage }}</p>
         </div>
         <ul class="list stack">
           <li v-for="room in rooms" :key="room.id" class="card" style="padding:12px">
@@ -69,18 +71,18 @@
           <label>姓名<input v-model="guestForm.full_name" required /></label>
           <label>邮箱<input type="email" v-model="guestForm.email" required /></label>
           <label>电话<input v-model="guestForm.phone_number" /></label>
-          <button type="submit">创建住客</button>
+          <button type="submit" :disabled="isGuestSubmitting">{{ isGuestSubmitting ? '创建中...' : '创建住客' }}</button>
           <p class="small" v-if="guestMessage">{{ guestMessage }}</p>
         </form>
 
         <h2>预订房间</h2>
         <form @submit.prevent="createBooking" class="stack">
-          <label>住客 (ID)<input v-model="bookingForm.guest" required /></label>
-          <label>房间 ID<input v-model="bookingForm.room" required /></label>
+          <label>住客 (ID)<input v-model="bookingForm.guest" required inputmode="numeric" /></label>
+          <label>房间 ID<input v-model="bookingForm.room" required inputmode="numeric" /></label>
           <label>入住日期<input type="date" v-model="bookingForm.check_in" required /></label>
           <label>退房日期<input type="date" v-model="bookingForm.check_out" required /></label>
           <label>备注<textarea v-model="bookingForm.notes"></textarea></label>
-          <button type="submit">创建预订</button>
+          <button type="submit" :disabled="isBookingSubmitting">{{ isBookingSubmitting ? '提交中...' : '创建预订' }}</button>
           <p class="small" v-if="bookingMessage">{{ bookingMessage }}</p>
         </form>
       </section>
@@ -88,17 +90,38 @@
       <section class="card">
         <h2>预订概览</h2>
         <p class="small">最新 10 条预订记录。</p>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+          <label>状态筛选
+            <select v-model="bookingFilterStatus">
+              <option value="">全部</option>
+              <option value="pending">待处理</option>
+              <option value="checked_in">已入住</option>
+              <option value="completed">已完成</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </label>
+          <label>搜索住客或房间
+            <input v-model="bookingSearch" placeholder="输入姓名或房间号" />
+          </label>
+        </div>
+        <p class="small" v-if="listMessage">{{ listMessage }}</p>
         <ul class="list stack">
-          <li v-for="booking in bookings" :key="booking.id" class="card" style="padding:12px">
+          <li v-for="booking in filteredBookings" :key="booking.id" class="card" style="padding:12px">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <strong>房间 {{ booking.room_detail.number }} · {{ booking.guest_detail.full_name }}</strong>
               <span class="pill" :class="booking.status">{{ booking.status }}</span>
             </div>
             <p class="small">{{ booking.check_in }} → {{ booking.check_out }} · ¥{{ booking.total_price }}</p>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="secondary" @click="updateStatus(booking.id, 'check_in')">入住</button>
-              <button class="secondary" @click="updateStatus(booking.id, 'complete')">完成</button>
-              <button class="secondary" @click="updateStatus(booking.id, 'cancel')">取消</button>
+              <button class="secondary" @click="updateStatus(booking.id, 'check_in')" :disabled="bookingActionLoading.has(booking.id)">
+                {{ bookingActionLoading.has(booking.id) ? '处理中...' : '入住' }}
+              </button>
+              <button class="secondary" @click="updateStatus(booking.id, 'complete')" :disabled="bookingActionLoading.has(booking.id)">
+                {{ bookingActionLoading.has(booking.id) ? '处理中...' : '完成' }}
+              </button>
+              <button class="secondary" @click="updateStatus(booking.id, 'cancel')" :disabled="bookingActionLoading.has(booking.id)">
+                {{ bookingActionLoading.has(booking.id) ? '处理中...' : '取消' }}
+              </button>
             </div>
           </li>
         </ul>
@@ -107,7 +130,7 @@
   </div>
 
   <script>
-    const { createApp, ref, onMounted } = Vue;
+    const { createApp, ref, onMounted, computed } = Vue;
     const apiBase = 'http://localhost:8000/api';
 
     createApp({
@@ -115,61 +138,140 @@
         const rooms = ref([]);
         const bookings = ref([]);
         const roomStatus = ref('');
+        const bookingFilterStatus = ref('');
+        const bookingSearch = ref('');
         const guestMessage = ref('');
         const bookingMessage = ref('');
+        const listMessage = ref('');
         const guestForm = ref({ full_name: '', email: '', phone_number: '' });
         const bookingForm = ref({ room: '', guest: '', check_in: '', check_out: '', notes: '' });
+        const isGuestSubmitting = ref(false);
+        const isBookingSubmitting = ref(false);
+        const bookingActionLoading = ref(new Set());
+
+        const apiFetch = async (path, options = {}) => {
+          const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+          try {
+            const res = await fetch(`${apiBase}${path}`, { ...options, headers });
+            const contentType = res.headers.get('content-type') || '';
+            const isJson = contentType.includes('application/json');
+            const payload = isJson ? await res.json() : await res.text();
+            if (!res.ok) {
+              const detail = payload?.detail || payload?.message || (typeof payload === 'string' ? payload : '');
+              return { error: detail || '请求失败，请稍后重试。' };
+            }
+            return { data: payload };
+          } catch (error) {
+            console.error(error);
+            return { error: '网络异常，请检查后端或网络连接。' };
+          }
+        };
+
+        const setActionLoading = (id, loading) => {
+          const next = new Set(bookingActionLoading.value);
+          if (loading) next.add(id);
+          else next.delete(id);
+          bookingActionLoading.value = next;
+        };
 
         const loadRooms = async () => {
+          listMessage.value = '';
           const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
-          const res = await fetch(`${apiBase}/rooms/${statusQuery}`);
-          rooms.value = await res.json();
+          const { data, error } = await apiFetch(`/rooms/${statusQuery}`);
+          if (error) {
+            listMessage.value = `房间列表加载失败：${error}`;
+            return;
+          }
+          rooms.value = data || [];
         };
 
         const loadBookings = async () => {
-          const res = await fetch(`${apiBase}/bookings/`);
-          bookings.value = await res.json();
+          listMessage.value = '';
+          const { data, error } = await apiFetch('/bookings/');
+          if (error) {
+            listMessage.value = `预订列表加载失败：${error}`;
+            return;
+          }
+          bookings.value = data || [];
         };
 
         const createGuest = async () => {
+          if (isGuestSubmitting.value) return;
           guestMessage.value = '';
-          const res = await fetch(`${apiBase}/guests/`, {
+          isGuestSubmitting.value = true;
+          const { data, error } = await apiFetch('/guests/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(guestForm.value),
           });
-          if (res.ok) {
-            const data = await res.json();
+          if (error) {
+            guestMessage.value = `创建失败：${error}`;
+          } else {
             guestMessage.value = `创建成功，住客ID: ${data.id}`;
             guestForm.value = { full_name: '', email: '', phone_number: '' };
-          } else {
-            guestMessage.value = '创建失败，请检查输入或后端日志。';
+            await loadBookings();
+            await loadRooms();
           }
+          isGuestSubmitting.value = false;
         };
 
         const createBooking = async () => {
+          if (isBookingSubmitting.value) return;
           bookingMessage.value = '';
-          const res = await fetch(`${apiBase}/bookings/`, {
+          const { guest, room, check_in, check_out } = bookingForm.value;
+          if (!guest || !room || !check_in || !check_out) {
+            bookingMessage.value = '请填写所有必填字段。';
+            return;
+          }
+          if (!/^[0-9]+$/.test(guest) || !/^[0-9]+$/.test(room)) {
+            bookingMessage.value = '住客 ID 和房间 ID 必须为数字。';
+            return;
+          }
+          if (new Date(check_out) <= new Date(check_in)) {
+            bookingMessage.value = '退房日期必须晚于入住日期。';
+            return;
+          }
+
+          isBookingSubmitting.value = true;
+          const { error } = await apiFetch('/bookings/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bookingForm.value),
           });
-          if (res.ok) {
+          if (error) {
+            bookingMessage.value = `预订创建失败：${error}`;
+          } else {
             bookingMessage.value = '预订已创建！';
             bookingForm.value = { room: '', guest: '', check_in: '', check_out: '', notes: '' };
-            loadBookings();
-            loadRooms();
-          } else {
-            const err = await res.json();
-            bookingMessage.value = err.detail || JSON.stringify(err);
+            await loadBookings();
+            await loadRooms();
           }
+          isBookingSubmitting.value = false;
         };
 
         const updateStatus = async (id, action) => {
-          await fetch(`${apiBase}/bookings/${id}/${action}/`, { method: 'POST' });
-          loadBookings();
-          loadRooms();
+          setActionLoading(id, true);
+          const { error } = await apiFetch(`/bookings/${id}/${action}/`, { method: 'POST' });
+          if (error) {
+            bookingMessage.value = `操作失败：${error}`;
+          } else {
+            bookingMessage.value = '状态已更新。';
+            await loadBookings();
+            await loadRooms();
+          }
+          setActionLoading(id, false);
         };
+
+        const filteredBookings = computed(() => {
+          return bookings.value.filter((booking) => {
+            const statusMatched = bookingFilterStatus.value ? booking.status === bookingFilterStatus.value : true;
+            const keyword = bookingSearch.value.trim().toLowerCase();
+            const guestName = booking.guest_detail?.full_name || '';
+            const roomNumber = booking.room_detail?.number ? String(booking.room_detail.number) : '';
+            const searchMatched = keyword
+              ? `${guestName} ${roomNumber}`.toLowerCase().includes(keyword)
+              : true;
+            return statusMatched && searchMatched;
+          });
+        });
 
         onMounted(() => {
           loadRooms();
@@ -184,6 +286,13 @@
           bookingForm,
           guestMessage,
           bookingMessage,
+          listMessage,
+          bookingFilterStatus,
+          bookingSearch,
+          filteredBookings,
+          isGuestSubmitting,
+          isBookingSubmitting,
+          bookingActionLoading,
           loadRooms,
           createGuest,
           createBooking,
