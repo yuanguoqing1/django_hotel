@@ -13,4 +13,7 @@ router.register(r'services', views.ServiceViewSet, basename='service')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/auth/login/', views.LoginView.as_view(), name='api-login'),
+    path('api/auth/me/', views.MeView.as_view(), name='api-me'),
+    path('api/auth/logout/', views.LogoutView.as_view(), name='api-logout'),
 ]
