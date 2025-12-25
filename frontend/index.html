@@ -9,15 +9,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
-    :root { font-family: 'Inter', sans-serif; background: #f6f7fb; color: #1f2937; }
-    body { margin: 0; padding: 24px; }
-    h1 { margin-top: 0; }
+    :root { font-family: 'Inter', sans-serif; background: #f6f7fb; color: #0f172a; }
+    body { margin: 0; }
+    h1, h2 { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    header { background: white; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05); padding: 16px 24px; position: sticky; top: 0; z-index: 10; }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; }
+    .brand { display: flex; gap: 12px; align-items: center; }
+    .brand-badge { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #7c3aed); display: grid; place-items: center; color: white; font-weight: 700; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid; gap: 24px; }
     .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-    .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-    label { display: block; margin-top: 8px; font-size: 0.9rem; color: #4b5563; }
-    input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
-    button { background: #2563eb; color: white; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
-    button.secondary { background: #e5e7eb; color: #111827; }
+    .layout { display: grid; gap: 16px; grid-template-columns: 2fr 1.3fr; align-items: start; }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+    .card { background: white; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .subtle { color: #6b7280; font-size: 0.95rem; margin: 0; }
+    label { display: block; margin-top: 8px; font-size: 0.9rem; color: #475569; font-weight: 600; }
+    input, select, textarea { width: 100%; padding: 10px 12px; margin-top: 6px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 1rem; background: #f8fafc; transition: border-color 0.2s, box-shadow 0.2s; }
+    input:focus, select:focus, textarea:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); background: white; }
+    .btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; border-radius: 12px; padding: 10px 16px; font-weight: 700; cursor: pointer; margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+    .btn.secondary { background: #e5e7eb; color: #111827; }
+    .btn.ghost { background: transparent; color: #1d4ed8; border: 1px solid #dbeafe; }
     .list { margin: 0; padding: 0; list-style: none; }
     .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; }
     .pill.available { background: #dcfce7; color: #166534; }
@@ -26,88 +38,217 @@
     .pill.checked_in { background: #dbeafe; color: #1d4ed8; }
     .pill.completed { background: #ecfccb; color: #3f6212; }
     .pill.cancelled { background: #fef2f2; color: #991b1b; }
-    .stack { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-    .small { font-size: 0.9rem; color: #6b7280; }
+    .pill.total { background: #e0f2fe; color: #075985; }
+    .stack { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .small { font-size: 0.95rem; color: #6b7280; margin: 0; }
+    .muted { color: #94a3b8; }
+    .inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .empty { padding: 12px; border: 1px dashed #e5e7eb; border-radius: 12px; text-align: center; color: #6b7280; background: #f8fafc; }
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 8px; }
+    .stat-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; background: linear-gradient(135deg, #f8fafc, #eef2ff); }
+    .stat-title { color: #475569; font-size: 0.9rem; margin-bottom: 4px; }
+    .stat-value { font-size: 1.6rem; font-weight: 800; margin: 0; }
+    .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 6px 10px; background: #eef2ff; color: #4338ca; border-radius: 999px; }
+    .hero { background: white; border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+    .separator { height: 1px; background: #e2e8f0; margin: 4px 0 8px; }
+    .error { color: #b91c1c; }
+    .success { color: #166534; }
   </style>
 </head>
 <body>
-  <div id="app" class="stack">
+  <div id="app">
     <header>
-      <h1>酒店管理后台</h1>
-      <p class="small">Django REST + Vue 轻量管理界面。确保后端运行在 <code>http://localhost:8000</code>。</p>
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-badge">H</div>
+          <div>
+            <div class="inline">
+              <h1>酒店管理后台</h1>
+              <span class="tag">Django REST · Vue 3</span>
+            </div>
+            <p class="subtle">轻量运营面板，确保后端运行在 <code>http://localhost:8000</code></p>
+          </div>
+        </div>
+        <div class="inline">
+          <span class="pill total">实时数据</span>
+        </div>
+      </div>
     </header>
 
-    <div class="grid">
-      <section class="card">
-        <h2>客房列表</h2>
-        <p class="small">查询或过滤可用状态。</p>
-        <div class="stack">
-          <label>筛选状态
-            <select v-model="roomStatus" @change="loadRooms">
+    <main class="container">
+      <section class="hero">
+        <div class="section-head">
+          <div>
+            <h2>房态概览</h2>
+            <p class="small">快速了解当前房间状态与运营数据。</p>
+          </div>
+          <div class="inline">
+            <label class="small" style="margin-top:0;">筛选状态</label>
+            <select v-model="roomStatus" @change="loadRooms" style="width:160px;">
               <option value="">全部</option>
               <option value="available">可预订</option>
               <option value="occupied">在住</option>
               <option value="maintenance">维修</option>
             </select>
-          </label>
+          </div>
         </div>
-        <ul class="list stack">
-          <li v-for="room in rooms" :key="room.id" class="card" style="padding:12px">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>房间 {{ room.number }} · {{ room.room_type }}</strong>
-              <span class="pill" :class="room.status">{{ room.status }}</span>
-            </div>
-            <p class="small">容量 {{ room.capacity }} · ¥{{ room.price }} / 晚</p>
-            <p class="small" v-if="room.description">{{ room.description }}</p>
-          </li>
-        </ul>
+        <div class="status-grid">
+          <div class="stat-card">
+            <p class="stat-title">全部房间</p>
+            <p class="stat-value">{{ totalRooms }}</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-title">可预订</p>
+            <p class="stat-value">{{ statusCounts.available || 0 }}</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-title">在住</p>
+            <p class="stat-value">{{ statusCounts.occupied || 0 }}</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-title">维修</p>
+            <p class="stat-value">{{ statusCounts.maintenance || 0 }}</p>
+          </div>
+        </div>
       </section>
 
-      <section class="card">
-        <h2>新增住客</h2>
-        <form @submit.prevent="createGuest" class="stack">
-          <label>姓名<input v-model="guestForm.full_name" required /></label>
-          <label>邮箱<input type="email" v-model="guestForm.email" required /></label>
-          <label>电话<input v-model="guestForm.phone_number" /></label>
-          <button type="submit">创建住客</button>
-          <p class="small" v-if="guestMessage">{{ guestMessage }}</p>
-        </form>
-
-        <h2>预订房间</h2>
-        <form @submit.prevent="createBooking" class="stack">
-          <label>住客 (ID)<input v-model="bookingForm.guest" required /></label>
-          <label>房间 ID<input v-model="bookingForm.room" required /></label>
-          <label>入住日期<input type="date" v-model="bookingForm.check_in" required /></label>
-          <label>退房日期<input type="date" v-model="bookingForm.check_out" required /></label>
-          <label>备注<textarea v-model="bookingForm.notes"></textarea></label>
-          <button type="submit">创建预订</button>
-          <p class="small" v-if="bookingMessage">{{ bookingMessage }}</p>
-        </form>
-      </section>
-
-      <section class="card">
-        <h2>预订概览</h2>
-        <p class="small">最新 10 条预订记录。</p>
-        <ul class="list stack">
-          <li v-for="booking in bookings" :key="booking.id" class="card" style="padding:12px">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>房间 {{ booking.room_detail.number }} · {{ booking.guest_detail.full_name }}</strong>
-              <span class="pill" :class="booking.status">{{ booking.status }}</span>
+      <div class="layout">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>客房列表</h2>
+              <p class="small">查询或过滤可用状态。</p>
             </div>
-            <p class="small">{{ booking.check_in }} → {{ booking.check_out }} · ¥{{ booking.total_price }}</p>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="secondary" @click="updateStatus(booking.id, 'check_in')">入住</button>
-              <button class="secondary" @click="updateStatus(booking.id, 'complete')">完成</button>
-              <button class="secondary" @click="updateStatus(booking.id, 'cancel')">取消</button>
+            <span class="pill total">{{ rooms.length }} 间</span>
+          </div>
+          <div class="stack">
+            <div v-if="roomsLoading" class="empty">房间加载中...</div>
+            <div v-else-if="roomsError" class="empty error">{{ roomsError }}</div>
+            <div v-else-if="rooms.length === 0" class="empty">暂无房间数据。</div>
+            <ul v-else class="list stack">
+              <li v-for="room in rooms" :key="room.id" class="card" style="padding:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                  <div>
+                    <strong>房间 {{ room.number }} · {{ room.room_type }}</strong>
+                    <p class="small">容量 {{ room.capacity }} · ¥{{ room.price }} / 晚</p>
+                  </div>
+                  <span class="pill" :class="room.status">{{ room.status }}</span>
+                </div>
+                <p class="small" v-if="room.description">{{ room.description }}</p>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>可用房搜索</h2>
+          <p class="small">选择起止日期，快速查询可入住的房间。</p>
+          <form @submit.prevent="searchAvailability" class="stack">
+            <label>开始日期<input type="date" v-model="availabilityForm.start" required /></label>
+            <label>结束日期<input type="date" v-model="availabilityForm.end" required /></label>
+            <button class="btn" type="submit" :disabled="availabilityLoading">
+              <span v-if="availabilityLoading">查询中...</span>
+              <span v-else>搜索可用房</span>
+            </button>
+          </form>
+          <div class="separator"></div>
+          <div class="stack">
+            <div v-if="availabilityLoading" class="empty">正在查询可用房...</div>
+            <div v-else-if="availabilityError" class="empty error">{{ availabilityError }}</div>
+            <div v-else-if="availabilityResults.length === 0" class="empty">暂无可用房结果。</div>
+            <ul v-else class="list stack">
+              <li v-for="room in availabilityResults" :key="room.id" class="card" style="padding:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                  <div>
+                    <strong>房间 {{ room.number }} · {{ room.room_type }}</strong>
+                    <p class="small">容量 {{ room.capacity }} · ¥{{ room.price }} / 晚</p>
+                  </div>
+                  <span class="pill available">可用</span>
+                </div>
+                <p class="small" v-if="room.description">{{ room.description }}</p>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <div class="layout">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>新增住客</h2>
+              <p class="small">创建住客档案后再进行预订。</p>
             </div>
-          </li>
-        </ul>
-      </section>
-    </div>
+          </div>
+          <form @submit.prevent="createGuest" class="stack">
+            <label>姓名<input v-model="guestForm.full_name" required /></label>
+            <label>邮箱<input type="email" v-model="guestForm.email" required /></label>
+            <label>电话<input v-model="guestForm.phone_number" /></label>
+            <button class="btn" type="submit" :disabled="guestLoading">
+              <span v-if="guestLoading">创建中...</span>
+              <span v-else>创建住客</span>
+            </button>
+            <p class="small success" v-if="guestMessage && !guestError">{{ guestMessage }}</p>
+            <p class="small error" v-if="guestError">{{ guestError }}</p>
+          </form>
+
+          <div class="separator"></div>
+          <div class="section-head">
+            <div>
+              <h2>预订房间</h2>
+              <p class="small">填写住客和房间 ID，创建新的预订。</p>
+            </div>
+          </div>
+          <form @submit.prevent="createBooking" class="stack">
+            <label>住客 (ID)<input v-model="bookingForm.guest" required /></label>
+            <label>房间 ID<input v-model="bookingForm.room" required /></label>
+            <label>入住日期<input type="date" v-model="bookingForm.check_in" required /></label>
+            <label>退房日期<input type="date" v-model="bookingForm.check_out" required /></label>
+            <label>备注<textarea v-model="bookingForm.notes"></textarea></label>
+            <button class="btn" type="submit" :disabled="bookingLoading">
+              <span v-if="bookingLoading">提交中...</span>
+              <span v-else>创建预订</span>
+            </button>
+            <p class="small success" v-if="bookingMessage && !bookingError">{{ bookingMessage }}</p>
+            <p class="small error" v-if="bookingError">{{ bookingError }}</p>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>预订概览</h2>
+              <p class="small">最新 10 条预订记录。</p>
+            </div>
+          </div>
+          <div class="stack">
+            <div v-if="bookingsLoading" class="empty">预订加载中...</div>
+            <div v-else-if="bookingsError" class="empty error">{{ bookingsError }}</div>
+            <div v-else-if="bookings.length === 0" class="empty">暂无预订记录。</div>
+            <ul v-else class="list stack">
+              <li v-for="booking in bookings" :key="booking.id" class="card" style="padding:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                  <div>
+                    <strong>房间 {{ booking.room_detail.number }} · {{ booking.guest_detail.full_name }}</strong>
+                    <p class="small">{{ booking.check_in }} → {{ booking.check_out }} · ¥{{ booking.total_price }}</p>
+                  </div>
+                  <span class="pill" :class="booking.status">{{ booking.status }}</span>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn secondary" @click="updateStatus(booking.id, 'check_in')">入住</button>
+                  <button class="btn secondary" @click="updateStatus(booking.id, 'complete')">完成</button>
+                  <button class="btn ghost" @click="updateStatus(booking.id, 'cancel')">取消</button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>
 
   <script>
-    const { createApp, ref, onMounted } = Vue;
+    const { createApp, ref, computed, onMounted } = Vue;
     const apiBase = 'http://localhost:8000/api';
 
     createApp({
@@ -116,52 +257,104 @@
         const bookings = ref([]);
         const roomStatus = ref('');
         const guestMessage = ref('');
+        const guestError = ref('');
+        const guestLoading = ref(false);
         const bookingMessage = ref('');
+        const bookingError = ref('');
+        const bookingLoading = ref(false);
+        const roomsLoading = ref(false);
+        const roomsError = ref('');
+        const bookingsLoading = ref(false);
+        const bookingsError = ref('');
+        const availabilityForm = ref({ start: '', end: '' });
+        const availabilityResults = ref([]);
+        const availabilityLoading = ref(false);
+        const availabilityError = ref('');
         const guestForm = ref({ full_name: '', email: '', phone_number: '' });
         const bookingForm = ref({ room: '', guest: '', check_in: '', check_out: '', notes: '' });
+        const statusCounts = computed(() => rooms.value.reduce((acc, room) => {
+          acc[room.status] = (acc[room.status] || 0) + 1;
+          return acc;
+        }, {}));
+        const totalRooms = computed(() => rooms.value.length);
 
         const loadRooms = async () => {
-          const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
-          const res = await fetch(`${apiBase}/rooms/${statusQuery}`);
-          rooms.value = await res.json();
+          roomsLoading.value = true;
+          roomsError.value = '';
+          try {
+            const statusQuery = roomStatus.value ? `?status=${roomStatus.value}` : '';
+            const res = await fetch(`${apiBase}/rooms/${statusQuery}`);
+            if (!res.ok) throw new Error('房间数据获取失败');
+            rooms.value = await res.json();
+          } catch (error) {
+            rooms.value = [];
+            roomsError.value = '房间加载失败，请检查后端服务。';
+          } finally {
+            roomsLoading.value = false;
+          }
         };
 
         const loadBookings = async () => {
-          const res = await fetch(`${apiBase}/bookings/`);
-          bookings.value = await res.json();
+          bookingsLoading.value = true;
+          bookingsError.value = '';
+          try {
+            const res = await fetch(`${apiBase}/bookings/`);
+            if (!res.ok) throw new Error('预订数据获取失败');
+            bookings.value = await res.json();
+          } catch (error) {
+            bookings.value = [];
+            bookingsError.value = '预订加载失败，请检查后端服务。';
+          } finally {
+            bookingsLoading.value = false;
+          }
         };
 
         const createGuest = async () => {
           guestMessage.value = '';
-          const res = await fetch(`${apiBase}/guests/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(guestForm.value),
-          });
-          if (res.ok) {
+          guestError.value = '';
+          guestLoading.value = true;
+          try {
+            const res = await fetch(`${apiBase}/guests/`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(guestForm.value),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || '创建失败，请检查输入或后端日志。');
+            }
             const data = await res.json();
             guestMessage.value = `创建成功，住客ID: ${data.id}`;
             guestForm.value = { full_name: '', email: '', phone_number: '' };
-          } else {
-            guestMessage.value = '创建失败，请检查输入或后端日志。';
+          } catch (error) {
+            guestError.value = error.message;
+          } finally {
+            guestLoading.value = false;
           }
         };
 
         const createBooking = async () => {
           bookingMessage.value = '';
-          const res = await fetch(`${apiBase}/bookings/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bookingForm.value),
-          });
-          if (res.ok) {
+          bookingError.value = '';
+          bookingLoading.value = true;
+          try {
+            const res = await fetch(`${apiBase}/bookings/`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(bookingForm.value),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || '预订创建失败，请检查输入。');
+            }
             bookingMessage.value = '预订已创建！';
             bookingForm.value = { room: '', guest: '', check_in: '', check_out: '', notes: '' };
             loadBookings();
             loadRooms();
-          } else {
-            const err = await res.json();
-            bookingMessage.value = err.detail || JSON.stringify(err);
+          } catch (error) {
+            bookingError.value = error.message;
+          } finally {
+            bookingLoading.value = false;
           }
         };
 
@@ -169,6 +362,25 @@
           await fetch(`${apiBase}/bookings/${id}/${action}/`, { method: 'POST' });
           loadBookings();
           loadRooms();
+        };
+
+        const searchAvailability = async () => {
+          availabilityLoading.value = true;
+          availabilityError.value = '';
+          availabilityResults.value = [];
+          try {
+            const params = new URLSearchParams({
+              start: availabilityForm.value.start,
+              end: availabilityForm.value.end,
+            });
+            const res = await fetch(`${apiBase}/rooms/available?${params.toString()}`);
+            if (!res.ok) throw new Error('可用房查询失败，请检查后端服务。');
+            availabilityResults.value = await res.json();
+          } catch (error) {
+            availabilityError.value = error.message;
+          } finally {
+            availabilityLoading.value = false;
+          }
         };
 
         onMounted(() => {
@@ -183,11 +395,26 @@
           guestForm,
           bookingForm,
           guestMessage,
+          guestError,
+          guestLoading,
           bookingMessage,
+          bookingError,
+          bookingLoading,
+          roomsLoading,
+          roomsError,
+          bookingsLoading,
+          bookingsError,
+          availabilityForm,
+          availabilityResults,
+          availabilityLoading,
+          availabilityError,
+          statusCounts,
+          totalRooms,
           loadRooms,
           createGuest,
           createBooking,
           updateStatus,
+          searchAvailability,
         };
       }
     }).mount('#app');
