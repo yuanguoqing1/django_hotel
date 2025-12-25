@@ -256,6 +256,8 @@
         const rooms = ref([]);
         const bookings = ref([]);
         const roomStatus = ref('');
+        const bookingFilterStatus = ref('');
+        const bookingSearch = ref('');
         const guestMessage = ref('');
         const guestError = ref('');
         const guestLoading = ref(false);
@@ -310,6 +312,7 @@
         };
 
         const createGuest = async () => {
+          if (isGuestSubmitting.value) return;
           guestMessage.value = '';
           guestError.value = '';
           guestLoading.value = true;
@@ -331,9 +334,11 @@
           } finally {
             guestLoading.value = false;
           }
+          isGuestSubmitting.value = false;
         };
 
         const createBooking = async () => {
+          if (isBookingSubmitting.value) return;
           bookingMessage.value = '';
           bookingError.value = '';
           bookingLoading.value = true;
@@ -356,12 +361,20 @@
           } finally {
             bookingLoading.value = false;
           }
+          isBookingSubmitting.value = false;
         };
 
         const updateStatus = async (id, action) => {
-          await fetch(`${apiBase}/bookings/${id}/${action}/`, { method: 'POST' });
-          loadBookings();
-          loadRooms();
+          setActionLoading(id, true);
+          const { error } = await apiFetch(`/bookings/${id}/${action}/`, { method: 'POST' });
+          if (error) {
+            bookingMessage.value = `操作失败：${error}`;
+          } else {
+            bookingMessage.value = '状态已更新。';
+            await loadBookings();
+            await loadRooms();
+          }
+          setActionLoading(id, false);
         };
 
         const searchAvailability = async () => {
